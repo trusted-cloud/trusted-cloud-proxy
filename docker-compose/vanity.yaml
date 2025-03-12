@@ -39,3 +39,6 @@ paths:
     /aes/littlebellmanagementclient:
         repo: https://<GITHUB_PAT>@github.com/trusted-cloud/littlebellmanagementclient
         vcs: git
+    /aes/containerregistrymanagementclient:
+        repo: https://<GITHUB_PAT>@github.com/trusted-cloud/containerregistrymanagementclient
+        vcs: git
