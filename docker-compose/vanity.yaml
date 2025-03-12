@@ -1,33 +1,41 @@
 host: pegasus-cloud.com
 paths:
-  /aes/toolkits:
-      repo: https://<GITHUB_PAT>@github.com/trusted-cloud/toolkits
-      vcs: git
-  /aes/appplaygroundserviceclient:
-      repo: https://<GITHUB_PAT>@github.com/trusted-cloud/appplaygroundserviceclient
-      vcs: git
-  /aes/eventpublishpluginclient:
-      repo: https://<GITHUB_PAT>@github.com/trusted-cloud/eventpublishpluginclient
-      vcs: git      
-  /aes/pegasusiamclient:
-      repo: https://<GITHUB_PAT>@github.com/trusted-cloud/pegasusiamclient
-      vcs: git        
-  /aes/resourceshiftserviceclient:
-      repo: https://<GITHUB_PAT>@github.com/trusted-cloud/resourceshiftserviceclient
-      vcs: git   
-  /aes/virtualplatformserviceclient:
-      repo: https://<GITHUB_PAT>@github.com/trusted-cloud/virtualplatformserviceclient
-      vcs: git   
-  /aes/virtualregistrymanagementclient:
-      repo: https://<GITHUB_PAT>@github.com/trusted-cloud/virtualregistrymanagementclient
-      vcs: git               
-  /aes/meteringtoolkits:
-      repo: https://<GITHUB_PAT>@github.com/trusted-cloud/meteringtoolkits
-      vcs: git    
-  /aes/pegasusmsgqueueclient:
-      repo: https://<GITHUB_PAT>@github.com/trusted-cloud/pegasusmsgqueueclient
-      vcs: git          
-  /aes/remotedispatchserviceclient:
-      repo: https://<GITHUB_PAT>@github.com/trusted-cloud/remotedispatchserviceclient
-      vcs: git         
-      
+    /aes/toolkits:
+        repo: https://<GITHUB_PAT>@github.com/trusted-cloud/toolkits
+        vcs: git
+    /aes/appplaygroundserviceclient:
+        repo: https://<GITHUB_PAT>@github.com/trusted-cloud/appplaygroundserviceclient
+        vcs: git
+    /aes/eventpublishpluginclient:
+        repo: https://<GITHUB_PAT>@github.com/trusted-cloud/eventpublishpluginclient
+        vcs: git
+    /aes/pegasusiamclient:
+        repo: https://<GITHUB_PAT>@github.com/trusted-cloud/pegasusiamclient
+        vcs: git
+    /aes/resourceshiftserviceclient:
+        repo: https://<GITHUB_PAT>@github.com/trusted-cloud/resourceshiftserviceclient
+        vcs: git
+    /aes/virtualplatformserviceclient:
+        repo: https://<GITHUB_PAT>@github.com/trusted-cloud/virtualplatformserviceclient
+        vcs: git
+    /aes/virtualregistrymanagementclient:
+        repo: https://<GITHUB_PAT>@github.com/trusted-cloud/virtualregistrymanagementclient
+        vcs: git
+    /aes/meteringtoolkits:
+        repo: https://<GITHUB_PAT>@github.com/trusted-cloud/meteringtoolkits
+        vcs: git
+    /aes/pegasusmsgqueueclient:
+        repo: https://<GITHUB_PAT>@github.com/trusted-cloud/pegasusmsgqueueclient
+        vcs: git
+    /aes/remotedispatchserviceclient:
+        repo: https://<GITHUB_PAT>@github.com/trusted-cloud/remotedispatchserviceclient
+        vcs: git
+    /aes/cloudkubeserviceclient:
+        repo: https://<GITHUB_PAT>@github.com/trusted-cloud/cloudkubeserviceclient
+        vcs: git
+    /aes/cloudstorageclient:
+        repo: https://<GITHUB_PAT>@github.com/trusted-cloud/cloudstorageclient
+        vcs: git
+    /aes/littlebellmanagementclient:
+        repo: https://<GITHUB_PAT>@github.com/trusted-cloud/littlebellmanagementclient
+        vcs: git
