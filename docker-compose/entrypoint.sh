@@ -1,7 +1,14 @@
 #!/bin/sh
 
-# start nginx 
-nginx 
+# start nginx
+echo "Start nginx daemon"
+nginx
+
+# start govanityurls
+echo "Start govanityurls in background"
+/usr/local/bin/govanityurls /etc/vanity.yaml &
 
 # start goproxy
-/app/goproxy/bin/goproxy -listen=0.0.0.0:8078 -exclude "pegasus-cloud.com"
+#/usr/local/bin/goproxy -listen=0.0.0.0:8078 -cacheDir="/tmp/download/module" -exclude "pegasus-cloud.com"
+echo "Start goproxy"
+/usr/local/bin/goproxy -listen=0.0.0.0:8078 -cacheDir="/tmp/download/module" -exclude ${GOINSECURE}
