@@ -15,3 +15,34 @@ cd docker-compose
 ./launch.sh <GIHUB_PAT>
 
 ```
+
+
+## Equivalent GIT CLI for Go module proxy
+
+### list
+
+```bash
+git ls-remote --tags https://dummy:${GITLAB_TOKEN}@git.narl.org.tw/gitlab-ee/trusted-cloud/services/toolkits.git | rev | cut -d/ -f1 | rev
+git ls-remote --tags https://dummy:${GITHUB_TOKEN}@github.com/trusted-cloud/toolkits.git | rev | cut -d/ -f1 | rev
+```
+
+
+### mode
+
+```bash
+git clone -b v0.4.5 https://dummy:${GITLAB_TOKEN}@git.narl.org.tw/gitlab-ee/trusted-cloud/services/toolkits.git
+
+
+```
+
+
+### info
+
+```bash
+GIT_PAGER=cat git log -1 --format=%cI
+```
+
+### zip
+
+```
+```

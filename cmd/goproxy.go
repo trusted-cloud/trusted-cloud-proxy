@@ -73,11 +73,11 @@ package main
 // TODO: when should we emit StatusGone? (see github.com/golang/go/issues/30134)
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -91,6 +91,16 @@ import (
 
 var cachedir = filepath.Join(os.Getenv("HOME"), "gomodproxy-cache")
 
+var DestRepoToken = os.Getenv("GITHUB_TOKEN")
+
+var SrcRepo = "pegasus-cloud.com/aes"
+var DestRepo = "github.com/trusted-cloud"
+var user = "dummy"
+
+var githubProjectMap = map[string]string{
+	SrcRepo: DestRepo,
+}
+
 func main() {
 	if err := os.MkdirAll(cachedir, 0755); err != nil {
 		log.Fatalf("creating cache: %v", err)
@@ -102,6 +112,13 @@ func main() {
 func handleMod(w http.ResponseWriter, req *http.Request) {
 	path := strings.TrimPrefix(req.URL.Path, "/mod/")
 
+	fmt.Println(path)
+
+	if _, ok := prefixed(path, SrcRepo+"/"); !ok {
+		http.Error(w, fmt.Sprintf("This proxy only for package under %s", SrcRepo), http.StatusNotFound)
+		return
+	}
+
 	// MODULE/@v/list
 	if mod, ok := suffixed(path, "/@v/list"); ok {
 		mod, err := module.UnescapePath(mod)
@@ -112,7 +129,7 @@ func handleMod(w http.ResponseWriter, req *http.Request) {
 
 		log.Println("list", mod)
 
-		versions, err := listVersions(mod)
+		versions, err := listVersionsGit(mod)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -217,17 +234,61 @@ func download(name, version string) (*ModuleDownloadJSON, error) {
 	return &mod, nil
 }
 
-// listVersions runs 'go list -m -versions' and returns an unordered list
-// of versions of the specified module.
-func listVersions(name string) ([]string, error) {
-	var mod ModuleListJSON
-	if err := runGo(&mod, "list", "-m", "-json", "-versions", name); err != nil {
-		return nil, err
+// listVersionsGit runs 'git ls-remote --tags <GIT_HTTP_REPO>'
+// and returns an unordered list of tags of the specified repo.
+func listVersionsGit(name string) ([]string, error) {
+
+	result := []string{}
+
+	sgement := strings.Split(name, "/")
+	pkg := sgement[len(sgement)-1]
+
+	// Construct the git command
+	repoURL := fmt.Sprintf("%s/%s", githubProjectMap[SrcRepo], pkg)
+	log.Println("git", repoURL)
+
+	gitURL := fmt.Sprintf("https://%s:%s@%s", user, DestRepoToken, repoURL)
+	cmd := exec.Command("git", "ls-remote", "--tags", gitURL)
+
+	// Execute the git command
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Fatalf("Error creating stdout pipe: %s", err)
 	}
-	if mod.Error != nil {
-		return nil, fmt.Errorf("failed to list module %s: %v", name, mod.Error.Err)
+
+	if err := cmd.Start(); err != nil {
+		log.Fatalf("Error starting git command: %s", err)
 	}
-	return mod.Versions, nil
+
+	// Use rev | cut -d/ -f1 | rev to extract tag names
+	reader := bufio.NewReader(stdout)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Fatalf("Error reading from stdout: %s", err)
+		}
+
+		line = strings.TrimSpace(line) // Remove leading/trailing whitespace
+		segments := strings.Split(line, "/")
+
+		// Check if the line contains enough segments to be a tag
+		if len(segments) > 2 && strings.Contains(line, "refs/tags/") { // More robust tag check
+			tagName := segments[len(segments)-1] // Get the last element
+
+			// fmt.Println(tagName)
+			result = append(result, tagName)
+		}
+
+	}
+
+	if err := cmd.Wait(); err != nil {
+		log.Fatalf("Error waiting for git command to finish: %s", err)
+	}
+
+	return result, nil
 }
 
 // resolve runs 'go list -m' to resolve a module version query to a specific version.
@@ -244,7 +305,7 @@ func resolve(name, query string) (*ModuleListJSON, error) {
 
 // runGo runs the Go command and decodes its JSON output into result.
 func runGo(result interface{}, args ...string) error {
-	tmpdir, err := ioutil.TempDir("", "")
+	tmpdir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return err
 	}
@@ -322,6 +383,13 @@ type InfoJSON struct {
 // and returns the prefix.
 func suffixed(x, suffix string) (rest string, ok bool) {
 	if y := strings.TrimSuffix(x, suffix); y != x {
+		return y, true
+	}
+	return
+}
+
+func prefixed(x, prefix string) (rest string, ok bool) {
+	if y := strings.TrimPrefix(x, prefix); y != x {
 		return y, true
 	}
 	return
