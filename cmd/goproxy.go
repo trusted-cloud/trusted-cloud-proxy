@@ -76,6 +76,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -86,6 +87,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/mux"
 	"golang.org/x/mod/module"
 )
 
@@ -105,8 +107,24 @@ func main() {
 	if err := os.MkdirAll(cachedir, 0755); err != nil {
 		log.Fatalf("creating cache: %v", err)
 	}
-	http.HandleFunc("/mod/", handleMod)
-	log.Fatal(http.ListenAndServe(":8000", nil))
+
+	// http.HandleFunc("/mod/", handleMod)
+	// log.Fatal(http.ListenAndServe(":8000", nil))
+
+	router := mux.NewRouter()
+	router.HandleFunc("/{module:.+}/@v/list", list).Methods(http.MethodGet)
+	router.HandleFunc("/{module:.+}/@v/{version}.info", info).Methods(http.MethodGet)
+	log.Fatal(http.ListenAndServe(":8000", isValidPkg(router)))
+}
+
+func isValidPkg(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/"+SrcRepo) {
+			http.Error(w, fmt.Sprintf("%s is ignored", r.URL), http.StatusNotFound)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func handleMod(w http.ResponseWriter, req *http.Request) {
@@ -114,10 +132,10 @@ func handleMod(w http.ResponseWriter, req *http.Request) {
 
 	fmt.Println(path)
 
-	if _, ok := prefixed(path, SrcRepo+"/"); !ok {
-		http.Error(w, fmt.Sprintf("This proxy only for package under %s", SrcRepo), http.StatusNotFound)
-		return
-	}
+	// if _, ok := prefixed(path, SrcRepo+"/"); !ok {
+	// 	http.Error(w, fmt.Sprintf("This proxy only for package under %s", SrcRepo), http.StatusNotFound)
+	// 	return
+	// }
 
 	// MODULE/@v/list
 	if mod, ok := suffixed(path, "/@v/list"); ok {
@@ -234,17 +252,50 @@ func download(name, version string) (*ModuleDownloadJSON, error) {
 	return &mod, nil
 }
 
+func list(w http.ResponseWriter, r *http.Request) {
+
+	mod := mux.Vars(r)["module"]
+	fmt.Println(mod)
+
+	mod, err := module.UnescapePath(mod)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	log.Println("list", mod)
+
+	versions, err := listVersionsGit(mod)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	for _, v := range versions {
+		fmt.Fprintln(w, v)
+	}
+}
+
 // listVersionsGit runs 'git ls-remote --tags <GIT_HTTP_REPO>'
 // and returns an unordered list of tags of the specified repo.
 func listVersionsGit(name string) ([]string, error) {
 
 	result := []string{}
 
-	sgement := strings.Split(name, "/")
-	pkg := sgement[len(sgement)-1]
+	segment := strings.Split(name, "/")
+	pkg := segment[len(segment)-1]
+
+	base := strings.Join(segment[:len(segment)-1], "/")
+
+	mappingURL, ok := githubProjectMap[base]
+	// If the key exists
+	if !ok {
+		return nil, errors.New("maping URL not found")
+	}
 
 	// Construct the git command
-	repoURL := fmt.Sprintf("%s/%s", githubProjectMap[SrcRepo], pkg)
+	repoURL := fmt.Sprintf("%s/%s", mappingURL, pkg)
 	log.Println("git", repoURL)
 
 	gitURL := fmt.Sprintf("https://%s:%s@%s", user, DestRepoToken, repoURL)
@@ -253,11 +304,11 @@ func listVersionsGit(name string) ([]string, error) {
 	// Execute the git command
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		log.Fatalf("Error creating stdout pipe: %s", err)
+		return nil, err
 	}
 
 	if err := cmd.Start(); err != nil {
-		log.Fatalf("Error starting git command: %s", err)
+		return nil, err
 	}
 
 	// Use rev | cut -d/ -f1 | rev to extract tag names
@@ -268,7 +319,7 @@ func listVersionsGit(name string) ([]string, error) {
 			if err == io.EOF {
 				break
 			}
-			log.Fatalf("Error reading from stdout: %s", err)
+			return nil, err
 		}
 
 		line = strings.TrimSpace(line) // Remove leading/trailing whitespace
@@ -285,10 +336,17 @@ func listVersionsGit(name string) ([]string, error) {
 	}
 
 	if err := cmd.Wait(); err != nil {
-		log.Fatalf("Error waiting for git command to finish: %s", err)
+		return nil, err
 	}
 
 	return result, nil
+}
+
+func info(w http.ResponseWriter, r *http.Request) {
+	json.NewEncoder(w).Encode(map[string]string{
+		"Version": "aaa",
+		"Time":    "aaa",
+	})
 }
 
 // resolve runs 'go list -m' to resolve a module version query to a specific version.
