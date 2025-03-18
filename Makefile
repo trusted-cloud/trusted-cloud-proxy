@@ -1,7 +1,7 @@
 
 .PHONY: build
 build:
-	@go build -o tmp/goproxy cmd/goproxy.go
+	@go build -mod=mod -o tmp/goproxy cmd/goproxy.go
 
 
 

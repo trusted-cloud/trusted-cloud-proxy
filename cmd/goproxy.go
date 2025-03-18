@@ -91,7 +91,8 @@ import (
 	"golang.org/x/mod/module"
 )
 
-var cachedir = filepath.Join(os.Getenv("HOME"), "gomodproxy-cache")
+// var cachedir = filepath.Join(os.Getenv("HOME"), "gomodproxy-cache")
+var cachedir = "/workspaces/trusted-cloud-proxy/vendor"
 
 var DestRepoToken = os.Getenv("GITHUB_TOKEN")
 
@@ -114,6 +115,8 @@ func main() {
 	router := mux.NewRouter()
 	router.HandleFunc("/{module:.+}/@v/list", list).Methods(http.MethodGet)
 	router.HandleFunc("/{module:.+}/@v/{version}.info", info).Methods(http.MethodGet)
+	router.HandleFunc("/{module:.+}/@v/{version}.mod", mod).Methods(http.MethodGet)
+	router.HandleFunc("/{module:.+}/@v/{version}.zip", zip).Methods(http.MethodGet)
 	log.Fatal(http.ListenAndServe(":8000", isValidPkg(router)))
 }
 
@@ -255,7 +258,6 @@ func download(name, version string) (*ModuleDownloadJSON, error) {
 func list(w http.ResponseWriter, r *http.Request) {
 
 	mod := mux.Vars(r)["module"]
-	fmt.Println(mod)
 
 	mod, err := module.UnescapePath(mod)
 	if err != nil {
@@ -343,10 +345,56 @@ func listVersionsGit(name string) ([]string, error) {
 }
 
 func info(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(map[string]string{
-		"Version": "aaa",
-		"Time":    "aaa",
-	})
+
+	//todo: download file
+
+	// filename := "/workspaces/trusted-cloud-proxy/vendor/pegasus-cloud.com/aes/toolkits/v0.4.5/v0.4.5.info"
+
+	filename := filepath.Join(cachedir, mux.Vars(r)["module"], mux.Vars(r)["version"], mux.Vars(r)["version"]+".info")
+
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	if err := copyFile(w, filename); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func mod(w http.ResponseWriter, r *http.Request) {
+
+	//todo: download file
+
+	// filename := "/workspaces/trusted-cloud-proxy/vendor/pegasus-cloud.com/aes/toolkits/v0.4.5/go.mod"
+
+	filename := filepath.Join(cachedir, mux.Vars(r)["module"], mux.Vars(r)["version"], "go.mod")
+
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
+	if err := copyFile(w, filename); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func zip(w http.ResponseWriter, r *http.Request) {
+
+	//todo: download file
+
+	// filename := "/workspaces/trusted-cloud-proxy/vendor/pegasus-cloud.com/aes/toolkits/v0.4.5/source.zip"
+
+	filename := filepath.Join(cachedir, mux.Vars(r)["module"], mux.Vars(r)["version"], "source.zip")
+
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/zip")
+	if err := copyFile(w, filename); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+// TODO:
+func downloadGit(name, version string) (*ModuleDownloadJSON, error) {
+	return &ModuleDownloadJSON{}, nil
 }
 
 // resolve runs 'go list -m' to resolve a module version query to a specific version.
