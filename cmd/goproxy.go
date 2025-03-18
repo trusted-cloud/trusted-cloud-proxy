@@ -74,7 +74,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -84,7 +83,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/gorilla/mux"
 	"golang.org/x/mod/module"
@@ -110,9 +108,6 @@ func main() {
 	log.Println("Token is required for", DestRepo, ":", DestRepoToken)
 	log.Println("Starting server on :8000")
 
-	// http.HandleFunc("/mod/", handleMod)
-	// log.Fatal(http.ListenAndServe(":8000", nil))
-
 	router := mux.NewRouter()
 	router.HandleFunc("/{module:.+}/@v/list", list).Methods(http.MethodGet)
 	router.HandleFunc("/{module:.+}/@v/{version}.info", info).Methods(http.MethodGet)
@@ -129,131 +124,6 @@ func isValidPkg(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func handleMod(w http.ResponseWriter, req *http.Request) {
-	path := strings.TrimPrefix(req.URL.Path, "/mod/")
-
-	fmt.Println(path)
-
-	// if _, ok := prefixed(path, SrcRepo+"/"); !ok {
-	// 	http.Error(w, fmt.Sprintf("This proxy only for package under %s", SrcRepo), http.StatusNotFound)
-	// 	return
-	// }
-
-	// MODULE/@v/list
-	if mod, ok := suffixed(path, "/@v/list"); ok {
-		mod, err := module.UnescapePath(mod)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		log.Println("list", mod)
-
-		versions, err := listVersionsGit(mod)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-
-		w.Header().Set("Cache-Control", "no-store")
-		for _, v := range versions {
-			fmt.Fprintln(w, v)
-		}
-		return
-	}
-
-	// MODULE/@latest
-	if mod, ok := suffixed(path, "/@latest"); ok {
-		mod, err := module.UnescapePath(mod)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		log.Println("latest", mod)
-
-		latest, err := resolve(mod, "latest")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-
-		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Content-Type", "application/json")
-		info := InfoJSON{Version: latest.Version, Time: latest.Time}
-		json.NewEncoder(w).Encode(info)
-		return
-	}
-
-	// MODULE/@v/VERSION.{info,mod,zip}
-	if rest, ext, ok := lastCut(path, "."); ok && isOneOf(ext, "mod", "info", "zip") {
-		if mod, version, ok := cut(rest, "/@v/"); ok {
-			mod, err := module.UnescapePath(mod)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			version, err := module.UnescapeVersion(version)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-
-			log.Printf("%s %s@%s", ext, mod, version)
-
-			m, err := download(mod, version)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusNotFound)
-				return
-			}
-
-			// The version may be a query such as a branch name.
-			// Branches move, so we suppress HTTP caching in that case.
-			// (To avoid repeated calls to download, the proxy could use
-			// the module name and resolved m.Version as a key in a cache.)
-			if version != m.Version {
-				w.Header().Set("Cache-Control", "no-store")
-				log.Printf("%s %s@%s => %s", ext, mod, version, m.Version)
-			}
-
-			// Return the relevant cached file.
-			var filename, mimetype string
-			switch ext {
-			case "info":
-				filename = m.Info
-				mimetype = "application/json"
-			case "mod":
-				filename = m.GoMod
-				mimetype = "text/plain; charset=UTF-8"
-			case "zip":
-				filename = m.Zip
-				mimetype = "application/zip"
-			}
-			w.Header().Set("Content-Type", mimetype)
-			if err := copyFile(w, filename); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			return
-		}
-	}
-
-	http.Error(w, "bad request", http.StatusBadRequest)
-}
-
-// download runs 'go mod download' and returns information about a
-// specific module version. It also downloads the module's dependencies.
-func download(name, version string) (*ModuleDownloadJSON, error) {
-	var mod ModuleDownloadJSON
-	if err := runGo(&mod, "mod", "download", "-json", name+"@"+version); err != nil {
-		return nil, err
-	}
-	if mod.Error != "" {
-		return nil, fmt.Errorf("failed to download module %s: %v", name, mod.Error)
-	}
-	return &mod, nil
 }
 
 func list(w http.ResponseWriter, r *http.Request) {
@@ -339,47 +209,73 @@ func listVersionsGit(name string) ([]string, error) {
 
 func info(w http.ResponseWriter, r *http.Request) {
 
-	// filename := "/workspaces/trusted-cloud-proxy/vendor/pegasus-cloud.com/aes/toolkits/v0.4.5/v0.4.5.info"
+	// filename := "/workspaces/trusted-cloud-proxy/cache/pegasus-cloud.com/aes/toolkits/v0.4.5/v0.4.5.info"
 	log.Println("info", r.URL.Path)
 
-	filename := filepath.Join(cachedir, mux.Vars(r)["module"], mux.Vars(r)["version"], mux.Vars(r)["version"]+".info")
+	module := mux.Vars(r)["module"]
+	version := mux.Vars(r)["version"]
+
+	filename := filepath.Join(cachedir, module, version, version+".info")
 
 	if serveCachedFile(w, r, filename, "application/json") {
 		return
 	}
 
-	http.Error(w, "info not found", http.StatusNotFound)
+	if err := fetchAndCache(module, version); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	//todo: download file
+	if serveCachedFile(w, r, filename, "application/json") {
+		return
+	}
 }
 
 func mod(w http.ResponseWriter, r *http.Request) {
 
-	// filename := "/workspaces/trusted-cloud-proxy/vendor/pegasus-cloud.com/aes/toolkits/v0.4.5/go.mod"
+	// filename := "/workspaces/trusted-cloud-proxy/cache/pegasus-cloud.com/aes/toolkits/v0.4.5/go.mod"
 	log.Println("mod", r.URL.Path)
 
-	filename := filepath.Join(cachedir, mux.Vars(r)["module"], mux.Vars(r)["version"], "go.mod")
+	module := mux.Vars(r)["module"]
+	version := mux.Vars(r)["version"]
+
+	filename := filepath.Join(cachedir, module, version, "go.mod")
 
 	if serveCachedFile(w, r, filename, "text/plain; charset=UTF-8") {
 		return
 	}
-	http.Error(w, "mod not found", http.StatusNotFound)
 
-	//todo: download file
+	if err := fetchAndCache(module, version); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if serveCachedFile(w, r, filename, "text/plain; charset=UTF-8") {
+		return
+	}
 }
 
 func zip(w http.ResponseWriter, r *http.Request) {
 
-	// filename := "/workspaces/trusted-cloud-proxy/vendor/pegasus-cloud.com/aes/toolkits/v0.4.5/source.zip"
+	// filename := "/workspaces/trusted-cloud-proxy/cache/pegasus-cloud.com/aes/toolkits/v0.4.5/source.zip"
 	log.Println("zip", r.URL.Path)
+	module := mux.Vars(r)["module"]
+	version := mux.Vars(r)["version"]
 
-	filename := filepath.Join(cachedir, mux.Vars(r)["module"], mux.Vars(r)["version"], "source.zip")
+	filename := filepath.Join(cachedir, module, version, "source.zip")
 
 	if serveCachedFile(w, r, filename, "application/zip") {
 		return
 	}
-	http.Error(w, "zip not found", http.StatusNotFound)
-	//todo: download file
+
+	if err := fetchAndCache(module, version); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if serveCachedFile(w, r, filename, "application/zip") {
+		return
+	}
 }
 
 func serveCachedFile(w http.ResponseWriter, r *http.Request, cachePath string, mime string) bool {
@@ -395,149 +291,133 @@ func serveCachedFile(w http.ResponseWriter, r *http.Request, cachePath string, m
 }
 
 func fetchAndCache(name, version string) error {
+
+	segment := strings.Split(name, "/")
+	pkg := segment[len(segment)-1]
+
+	repoURL := filepath.Join(DestRepo, pkg)
+	log.Println("git", repoURL)
+
+	// Create a temporary directory for the git clone
+	cloneTempDir, err := os.MkdirTemp("", "git-clone-temp")
+	if err != nil {
+		log.Fatalf("Error creating temporary directory: %s", err)
+	}
+	// defer os.RemoveAll(cloneTempDir) // Clean up the clone temp dir when the program exits
+
+	// create cached directory
+	destDir := filepath.Join(cachedir, name, version)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return err
+	}
+
+	// 5. Construct the git clone command with the token and branch
+	cloneURL := fmt.Sprintf("https://dummy:%s@%s", DestRepoToken, repoURL)
+
+	cmd := exec.Command("git", "clone", "-b", version, cloneURL, cloneTempDir)
+
+	// 6. Execute the git clone command
+	if _, err := cmd.CombinedOutput(); err != nil {
+		return err
+	}
+
+	// 7. Get the git log date
+	logCmd := exec.Command("git", "log", "-1", "--format=%cI")
+	logCmd.Dir = cloneTempDir // Set the working directory to the cloned repo
+
+	// Set the GIT_PAGER environment variable to "cat"
+	env := os.Environ()
+	env = append(env, "GIT_PAGER=cat")
+	logCmd.Env = env
+
+	logOutput, err := logCmd.CombinedOutput()
+	if err != nil {
+		log.Fatalf("Error getting git log date: %s\nOutput: %s", err, string(logOutput))
+	}
+
+	logDate := strings.TrimSpace(string(logOutput))
+
+	// 8. Create the Info struct
+	info := Info{
+		Version: version,
+		Time:    logDate,
+	}
+
+	// 9. Marshal the Info struct to JSON
+	jsonData, err := json.Marshal(info)
+	if err != nil {
+		log.Fatalf("Error marshaling JSON: %s", err)
+	}
+
+	// 10. Create the filename and destination path for info
+	infoFilename := fmt.Sprintf("%s.info", version)
+	infoDestPath := filepath.Join(destDir, infoFilename)
+
+	// 11. Write the JSON data to the file in the tmp directory
+	err = os.WriteFile(infoDestPath, jsonData, 0644)
+	if err != nil {
+		log.Fatalf("Error writing file: %s", err)
+	}
+
+	// 12. Copy go.mod to the tmp directory
+	sourceGoMod := filepath.Join(cloneTempDir, "go.mod") // Source path in the cloned repo
+	destGoMod := filepath.Join(destDir, "go.mod")        // Destination in the tmp directory
+
+	err = copyFile(sourceGoMod, destGoMod)
+	if err != nil {
+		log.Fatalf("Error copying go.mod: %s", err)
+	}
+
+	// 13. Create the zip archive
+	prefix := fmt.Sprintf("%s@%s/", name, version) // Correct prefix format
+	zipCmd := exec.Command("git", "archive",
+		fmt.Sprintf("--prefix=%s", prefix), // Use formatted prefix
+		"--format", "zip",
+		"--output", "source.zip",
+		version, // Specify the tag for the archive
+		".")
+
+	zipCmd.Dir = cloneTempDir // Execute the command within the cloned repo
+
+	zipOutput, err := zipCmd.CombinedOutput()
+	if err != nil {
+		log.Fatalf("Error creating zip archive: %s\nOutput: %s", err, string(zipOutput))
+	}
+
+	sourceZip := filepath.Join(cloneTempDir, "source.zip") // Source path in the cloned repo
+	destZip := filepath.Join(destDir, "source.zip")        // Destination in the tmp directory
+
+	err = copyFile(sourceZip, destZip)
+	if err != nil {
+		log.Fatalf("Error copying go.mod: %s", err)
+	}
+
 	return nil
 }
 
-// TODO:
-func downloadGit(name, version string) (*ModuleDownloadJSON, error) {
-	return &ModuleDownloadJSON{}, nil
-}
-
-// resolve runs 'go list -m' to resolve a module version query to a specific version.
-func resolve(name, query string) (*ModuleListJSON, error) {
-	var mod ModuleListJSON
-	if err := runGo(&mod, "list", "-m", "-json", name+"@"+query); err != nil {
-		return nil, err
-	}
-	if mod.Error != nil {
-		return nil, fmt.Errorf("failed to list module %s: %v", name, mod.Error.Err)
-	}
-	return &mod, nil
-}
-
-// runGo runs the Go command and decodes its JSON output into result.
-func runGo(result interface{}, args ...string) error {
-	tmpdir, err := os.MkdirTemp("", "")
+// copyFile copies a file from source to destination
+func copyFile(source, destination string) error {
+	sourceFile, err := os.Open(source)
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tmpdir)
+	defer sourceFile.Close()
 
-	cmd := exec.Command("go", args...)
-	cmd.Dir = tmpdir
-	// Construct environment from scratch, for hygiene.
-	cmd.Env = []string{
-		"USER=" + os.Getenv("USER"),
-		"PATH=" + os.Getenv("PATH"),
-		"HOME=" + os.Getenv("HOME"),
-		"NETRC=", // don't allow go command to read user's secrets
-		"GOPROXY=direct",
-		"GOCACHE=" + cachedir,
-		"GOMODCACHE=" + cachedir,
-		"GOSUMDB=",
+	destFile, err := os.Create(destination)
+	if err != nil {
+		return err
 	}
-	cmd.Stdout = new(bytes.Buffer)
-	cmd.Stderr = new(bytes.Buffer)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s failed: %v (stderr=<<%s>>)", cmd, err, cmd.Stderr)
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+	if err != nil {
+		return err
 	}
-	if err := json.Unmarshal(cmd.Stdout.(*bytes.Buffer).Bytes(), result); err != nil {
-		return fmt.Errorf("internal error decoding %s JSON output: %v", cmd, err)
-	}
+
 	return nil
 }
 
-// -- JSON schemas --
-
-// ModuleDownloadJSON is the JSON schema of the output of 'go help mod download'.
-type ModuleDownloadJSON struct {
-	Path     string // module path
-	Version  string // module version
-	Error    string // error loading module
-	Info     string // absolute path to cached .info file
-	GoMod    string // absolute path to cached .mod file
-	Zip      string // absolute path to cached .zip file
-	Dir      string // absolute path to cached source root directory
-	Sum      string // checksum for path, version (as in go.sum)
-	GoModSum string // checksum for go.mod (as in go.sum)
-}
-
-// ModuleListJSON is the JSON schema of the output of 'go help list'.
-type ModuleListJSON struct {
-	Path      string          // module path
-	Version   string          // module version
-	Versions  []string        // available module versions (with -versions)
-	Replace   *ModuleListJSON // replaced by this module
-	Time      *time.Time      // time version was created
-	Update    *ModuleListJSON // available update, if any (with -u)
-	Main      bool            // is this the main module?
-	Indirect  bool            // is this module only an indirect dependency of main module?
-	Dir       string          // directory holding files for this module, if any
-	GoMod     string          // path to go.mod file used when loading this module, if any
-	GoVersion string          // go version used in module
-	Retracted string          // retraction information, if any (with -retracted or -u)
-	Error     *ModuleError    // error loading module
-}
-
-type ModuleError struct {
-	Err string // the error itself
-}
-
-// InfoJSON is the JSON schema of the .info and @latest endpoints.
-type InfoJSON struct {
-	Version string
-	Time    *time.Time
-}
-
-// -- helpers --
-
-// suffixed reports whether x has the specified suffix,
-// and returns the prefix.
-func suffixed(x, suffix string) (rest string, ok bool) {
-	if y := strings.TrimSuffix(x, suffix); y != x {
-		return y, true
-	}
-	return
-}
-
-func prefixed(x, prefix string) (rest string, ok bool) {
-	if y := strings.TrimPrefix(x, prefix); y != x {
-		return y, true
-	}
-	return
-}
-
-// See https://github.com/golang/go/issues/46336
-func cut(s, sep string) (before, after string, found bool) {
-	if i := strings.Index(s, sep); i >= 0 {
-		return s[:i], s[i+len(sep):], true
-	}
-	return s, "", false
-}
-
-func lastCut(s, sep string) (before, after string, found bool) {
-	if i := strings.LastIndex(s, sep); i >= 0 {
-		return s[:i], s[i+len(sep):], true
-	}
-	return s, "", false
-}
-
-// copyFile writes the content of the named file to dest.
-func copyFile(dest io.Writer, name string) error {
-	f, err := os.Open(name)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = io.Copy(dest, f)
-	return err
-}
-
-func isOneOf(s string, items ...string) bool {
-	for _, item := range items {
-		if s == item {
-			return true
-		}
-	}
-	return false
+type Info struct {
+	Version string `json:"Version"`
+	Time    string `json:"Time"`
 }

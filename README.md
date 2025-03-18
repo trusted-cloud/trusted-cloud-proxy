@@ -32,7 +32,7 @@ git ls-remote --tags https://dummy:${GITHUB_TOKEN}@github.com/trusted-cloud/tool
 ```bash
 git clone -b v0.4.5 https://dummy:${GITLAB_TOKEN}@git.narl.org.tw/gitlab-ee/trusted-cloud/services/toolkits.git
 
-
+git clone -b v0.4.5 https://dummy:${GITHUB_TOKEN}@github.com/trusted-cloud/toolkits.git 
 ```
 
 
@@ -44,5 +44,6 @@ GIT_PAGER=cat git log -1 --format=%cI
 
 ### zip
 
-```
+```bash
+git archive --prefix=pegasus-cloud.com/aes/toolkits@v0.4.5/ --format zip --output source.zip v0.4.5 . ':!/.git*'
 ```
