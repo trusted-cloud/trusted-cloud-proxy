@@ -1,9 +1,9 @@
 
 .PHONY: build
 build:
-	@go build -o tmp/goproxy cmd/goproxy.go
+	@go build -ldflags="-extldflags=-static" -o tmp/goproxy cmd/goproxy.go
 
 
-
+.PHONY: run
 run:
 	@./tmp/goproxy

@@ -88,32 +88,53 @@ import (
 	"golang.org/x/mod/module"
 )
 
-// var cachedir = filepath.Join(os.Getenv("HOME"), "gomodproxy-cache")
-var cachedir = "/workspaces/trusted-cloud-proxy/cache"
+var CacheDir, DestRepoToken, DestRepo, SrcRepo, Port string
 
-var DestRepoToken = os.Getenv("GITHUB_TOKEN")
-
-var SrcRepo = "pegasus-cloud.com/aes"
-var DestRepo = "github.com/trusted-cloud"
 var user = "dummy"
 
 func main() {
-	log.Println("Proxy Module Cache Directory:", cachedir)
 
-	if err := os.MkdirAll(cachedir, 0755); err != nil {
+	Port = os.Getenv("PORT")
+	if Port == "" {
+		Port = "8078"
+	}
+
+	CacheDir = os.Getenv("CACHE_DIR")
+	if CacheDir == "" {
+		CacheDir = "/tmp/cache"
+	}
+
+	DestRepoToken = os.Getenv("REPO_TOKEN")
+	if DestRepoToken == "" {
+		log.Fatal("Error: REPO_TOKEN environment variable not set")
+	}
+
+	SrcRepo = os.Getenv("SRC_REPO")
+	if SrcRepo == "" {
+		log.Fatal("Error: SRC_REPO environment variable not set")
+	}
+
+	DestRepo = os.Getenv("DEST_REPO")
+	if DestRepo == "" {
+		log.Fatal("Error: DEST_REPO environment variable not set")
+	}
+
+	log.Println("Proxy Module Cache Directory:", CacheDir)
+
+	if err := os.MkdirAll(CacheDir, 0755); err != nil {
 		log.Fatalf("creating cache: %v", err)
 	}
 
 	log.Println("Mapping module from", SrcRepo, "to", DestRepo)
 	log.Println("Token is required for", DestRepo, ":", DestRepoToken)
-	log.Println("Starting server on :8000")
+	log.Println("Starting server on :", Port)
 
 	router := mux.NewRouter()
 	router.HandleFunc("/{module:.+}/@v/list", list).Methods(http.MethodGet)
 	router.HandleFunc("/{module:.+}/@v/{version}.info", info).Methods(http.MethodGet)
 	router.HandleFunc("/{module:.+}/@v/{version}.mod", mod).Methods(http.MethodGet)
 	router.HandleFunc("/{module:.+}/@v/{version}.zip", zip).Methods(http.MethodGet)
-	log.Fatal(http.ListenAndServe(":8000", isValidPkg(router)))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", Port), isValidPkg(router)))
 }
 
 func isValidPkg(next http.Handler) http.Handler {
@@ -215,7 +236,7 @@ func info(w http.ResponseWriter, r *http.Request) {
 	module := mux.Vars(r)["module"]
 	version := mux.Vars(r)["version"]
 
-	filename := filepath.Join(cachedir, module, version, version+".info")
+	filename := filepath.Join(CacheDir, module, version, version+".info")
 
 	if serveCachedFile(w, r, filename, "application/json") {
 		return
@@ -239,7 +260,7 @@ func mod(w http.ResponseWriter, r *http.Request) {
 	module := mux.Vars(r)["module"]
 	version := mux.Vars(r)["version"]
 
-	filename := filepath.Join(cachedir, module, version, "go.mod")
+	filename := filepath.Join(CacheDir, module, version, "go.mod")
 
 	if serveCachedFile(w, r, filename, "text/plain; charset=UTF-8") {
 		return
@@ -262,7 +283,7 @@ func zip(w http.ResponseWriter, r *http.Request) {
 	module := mux.Vars(r)["module"]
 	version := mux.Vars(r)["version"]
 
-	filename := filepath.Join(cachedir, module, version, "source.zip")
+	filename := filepath.Join(CacheDir, module, version, "source.zip")
 
 	if serveCachedFile(w, r, filename, "application/zip") {
 		return
@@ -306,7 +327,7 @@ func fetchAndCache(name, version string) error {
 	// defer os.RemoveAll(cloneTempDir) // Clean up the clone temp dir when the program exits
 
 	// create cached directory
-	destDir := filepath.Join(cachedir, name, version)
+	destDir := filepath.Join(CacheDir, name, version)
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return err
 	}
