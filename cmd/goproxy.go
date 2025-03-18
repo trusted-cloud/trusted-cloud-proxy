@@ -82,6 +82,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -109,12 +110,12 @@ func main() {
 		log.Fatal("Error: REPO_TOKEN environment variable not set")
 	}
 
-	SrcRepo = os.Getenv("SRC_REPO")
+	SrcRepo = removeSchemeAndTrailingSlash(os.Getenv("SRC_REPO"))
 	if SrcRepo == "" {
 		log.Fatal("Error: SRC_REPO environment variable not set")
 	}
 
-	DestRepo = os.Getenv("DEST_REPO")
+	DestRepo = removeSchemeAndTrailingSlash(os.Getenv("DEST_REPO"))
 	if DestRepo == "" {
 		log.Fatal("Error: DEST_REPO environment variable not set")
 	}
@@ -322,9 +323,9 @@ func fetchAndCache(name, version string) error {
 	// Create a temporary directory for the git clone
 	cloneTempDir, err := os.MkdirTemp("", "git-clone-temp")
 	if err != nil {
-		log.Fatalf("Error creating temporary directory: %s", err)
+		return err
 	}
-	// defer os.RemoveAll(cloneTempDir) // Clean up the clone temp dir when the program exits
+	defer os.RemoveAll(cloneTempDir) // Clean up the clone temp dir when the program exits
 
 	// create cached directory
 	destDir := filepath.Join(CacheDir, name, version)
@@ -353,7 +354,7 @@ func fetchAndCache(name, version string) error {
 
 	logOutput, err := logCmd.CombinedOutput()
 	if err != nil {
-		log.Fatalf("Error getting git log date: %s\nOutput: %s", err, string(logOutput))
+		return err
 	}
 
 	logDate := strings.TrimSpace(string(logOutput))
@@ -367,7 +368,7 @@ func fetchAndCache(name, version string) error {
 	// 9. Marshal the Info struct to JSON
 	jsonData, err := json.Marshal(info)
 	if err != nil {
-		log.Fatalf("Error marshaling JSON: %s", err)
+		return err
 	}
 
 	// 10. Create the filename and destination path for info
@@ -377,7 +378,7 @@ func fetchAndCache(name, version string) error {
 	// 11. Write the JSON data to the file in the tmp directory
 	err = os.WriteFile(infoDestPath, jsonData, 0644)
 	if err != nil {
-		log.Fatalf("Error writing file: %s", err)
+		return err
 	}
 
 	// 12. Copy go.mod to the tmp directory
@@ -386,7 +387,7 @@ func fetchAndCache(name, version string) error {
 
 	err = copyFile(sourceGoMod, destGoMod)
 	if err != nil {
-		log.Fatalf("Error copying go.mod: %s", err)
+		return err
 	}
 
 	// 13. Create the zip archive
@@ -400,9 +401,8 @@ func fetchAndCache(name, version string) error {
 
 	zipCmd.Dir = cloneTempDir // Execute the command within the cloned repo
 
-	zipOutput, err := zipCmd.CombinedOutput()
-	if err != nil {
-		log.Fatalf("Error creating zip archive: %s\nOutput: %s", err, string(zipOutput))
+	if _, err := zipCmd.CombinedOutput(); err != nil {
+		return err
 	}
 
 	sourceZip := filepath.Join(cloneTempDir, "source.zip") // Source path in the cloned repo
@@ -410,7 +410,7 @@ func fetchAndCache(name, version string) error {
 
 	err = copyFile(sourceZip, destZip)
 	if err != nil {
-		log.Fatalf("Error copying go.mod: %s", err)
+		return err
 	}
 
 	return nil
@@ -436,6 +436,16 @@ func copyFile(source, destination string) error {
 	}
 
 	return nil
+}
+
+func removeSchemeAndTrailingSlash(url string) string {
+	// Remove http:// or https://
+	reHTTP := regexp.MustCompile(`^https?://`)
+	url = reHTTP.ReplaceAllString(url, "")
+
+	// Remove trailing slash
+	reTrailingSlash := regexp.MustCompile(`/$`)
+	return reTrailingSlash.ReplaceAllString(url, "")
 }
 
 type Info struct {
