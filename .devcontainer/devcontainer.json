@@ -1,0 +1,39 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the README at:
+// https://github.com/microsoft/vscode-dev-containers/tree/v0.205.2/containers/alpine
+{
+	"name": "golang",
+	"build": {
+		"dockerfile": "Dockerfile",
+		"args": {
+			// go version and arch
+			"GO_VER": "1.22.4",
+			"GO_ARCH": "alpine",
+			// install kubectl version
+			"INSTALL_KUBECTL": "false",
+			"KUBECTL_VER": "1.29.1"
+		}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"golang.Go",
+				"GitHub.copilot",
+				"isudox.vscode-jetbrains-keybindings",
+			]
+		}
+	},
+	"containerEnv": {
+		"GOPROXY": "https://proxy.golang.org,http://goproxy-devcontainer:8080",
+		"GOSUMDB": "off",
+		"SRC_REPO": "pegasus-cloud.com/aes",
+		"DEST_REPO": "github.com/trusted-cloud",
+		"REPO_TOKEN": "",
+	},
+
+
+	// docker args to run the container, connect to KinD network
+	"runArgs": [
+		"--network=kind",
+		"--name=goproxy-devcontainer"
+	]
+}
