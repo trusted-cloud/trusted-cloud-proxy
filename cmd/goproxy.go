@@ -76,7 +76,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -92,7 +91,7 @@ import (
 )
 
 // var cachedir = filepath.Join(os.Getenv("HOME"), "gomodproxy-cache")
-var cachedir = "/workspaces/trusted-cloud-proxy/vendor"
+var cachedir = "/workspaces/trusted-cloud-proxy/cache"
 
 var DestRepoToken = os.Getenv("GITHUB_TOKEN")
 
@@ -100,14 +99,16 @@ var SrcRepo = "pegasus-cloud.com/aes"
 var DestRepo = "github.com/trusted-cloud"
 var user = "dummy"
 
-var githubProjectMap = map[string]string{
-	SrcRepo: DestRepo,
-}
-
 func main() {
+	log.Println("Proxy Module Cache Directory:", cachedir)
+
 	if err := os.MkdirAll(cachedir, 0755); err != nil {
 		log.Fatalf("creating cache: %v", err)
 	}
+
+	log.Println("Mapping module from", SrcRepo, "to", DestRepo)
+	log.Println("Token is required for", DestRepo, ":", DestRepoToken)
+	log.Println("Starting server on :8000")
 
 	// http.HandleFunc("/mod/", handleMod)
 	// log.Fatal(http.ListenAndServe(":8000", nil))
@@ -257,6 +258,8 @@ func download(name, version string) (*ModuleDownloadJSON, error) {
 
 func list(w http.ResponseWriter, r *http.Request) {
 
+	log.Println("list", r.URL.Path)
+
 	mod := mux.Vars(r)["module"]
 
 	mod, err := module.UnescapePath(mod)
@@ -264,8 +267,6 @@ func list(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	log.Println("list", mod)
 
 	versions, err := listVersionsGit(mod)
 	if err != nil {
@@ -288,16 +289,8 @@ func listVersionsGit(name string) ([]string, error) {
 	segment := strings.Split(name, "/")
 	pkg := segment[len(segment)-1]
 
-	base := strings.Join(segment[:len(segment)-1], "/")
-
-	mappingURL, ok := githubProjectMap[base]
-	// If the key exists
-	if !ok {
-		return nil, errors.New("maping URL not found")
-	}
-
 	// Construct the git command
-	repoURL := fmt.Sprintf("%s/%s", mappingURL, pkg)
+	repoURL := fmt.Sprintf("%s/%s", DestRepo, pkg)
 	log.Println("git", repoURL)
 
 	gitURL := fmt.Sprintf("https://%s:%s@%s", user, DestRepoToken, repoURL)
@@ -346,50 +339,63 @@ func listVersionsGit(name string) ([]string, error) {
 
 func info(w http.ResponseWriter, r *http.Request) {
 
-	//todo: download file
-
 	// filename := "/workspaces/trusted-cloud-proxy/vendor/pegasus-cloud.com/aes/toolkits/v0.4.5/v0.4.5.info"
+	log.Println("info", r.URL.Path)
 
 	filename := filepath.Join(cachedir, mux.Vars(r)["module"], mux.Vars(r)["version"], mux.Vars(r)["version"]+".info")
 
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Type", "application/json")
-	if err := copyFile(w, filename); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if serveCachedFile(w, r, filename, "application/json") {
 		return
 	}
+
+	http.Error(w, "info not found", http.StatusNotFound)
+
+	//todo: download file
 }
 
 func mod(w http.ResponseWriter, r *http.Request) {
 
-	//todo: download file
-
 	// filename := "/workspaces/trusted-cloud-proxy/vendor/pegasus-cloud.com/aes/toolkits/v0.4.5/go.mod"
+	log.Println("mod", r.URL.Path)
 
 	filename := filepath.Join(cachedir, mux.Vars(r)["module"], mux.Vars(r)["version"], "go.mod")
 
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
-	if err := copyFile(w, filename); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if serveCachedFile(w, r, filename, "text/plain; charset=UTF-8") {
 		return
 	}
+	http.Error(w, "mod not found", http.StatusNotFound)
+
+	//todo: download file
 }
 
 func zip(w http.ResponseWriter, r *http.Request) {
 
-	//todo: download file
-
 	// filename := "/workspaces/trusted-cloud-proxy/vendor/pegasus-cloud.com/aes/toolkits/v0.4.5/source.zip"
+	log.Println("zip", r.URL.Path)
 
 	filename := filepath.Join(cachedir, mux.Vars(r)["module"], mux.Vars(r)["version"], "source.zip")
 
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Type", "application/zip")
-	if err := copyFile(w, filename); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if serveCachedFile(w, r, filename, "application/zip") {
 		return
 	}
+	http.Error(w, "zip not found", http.StatusNotFound)
+	//todo: download file
+}
+
+func serveCachedFile(w http.ResponseWriter, r *http.Request, cachePath string, mime string) bool {
+
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", mime)
+
+	if _, err := os.Stat(cachePath); err == nil {
+		http.ServeFile(w, r, cachePath)
+		return true
+	}
+	return false
+}
+
+func fetchAndCache(name, version string) error {
+	return nil
 }
 
 // TODO:
