@@ -132,9 +132,7 @@ func main() {
 
 	router := mux.NewRouter()
 	router.HandleFunc("/{module:.+}/@v/list", list).Methods(http.MethodGet)
-	router.HandleFunc("/{module:.+}/@v/{version}.info", info).Methods(http.MethodGet)
-	router.HandleFunc("/{module:.+}/@v/{version}.mod", mod).Methods(http.MethodGet)
-	router.HandleFunc("/{module:.+}/@v/{version}.zip", zip).Methods(http.MethodGet)
+	router.HandleFunc("/{module:.+}/@v/{version}.{ext}", handler).Methods(http.MethodGet)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", Port), isValidPkg(router)))
 }
 
@@ -229,52 +227,33 @@ func listVersionsGit(name string) ([]string, error) {
 	return result, nil
 }
 
-func info(w http.ResponseWriter, r *http.Request) {
+func handler(w http.ResponseWriter, r *http.Request) {
 
-	// filename := "/workspaces/trusted-cloud-proxy/cache/pegasus-cloud.com/aes/toolkits/v0.4.5/v0.4.5.info"
-	log.Println("info", r.URL.Path)
+	vars := mux.Vars(r)
+	module := vars["module"]
+	version := vars["version"]
+	ext := vars["ext"]
 
-	module := mux.Vars(r)["module"]
-	version := mux.Vars(r)["version"]
+	var filename, mimetype string
 
-	filename := filepath.Join(CacheDir, module, version, version+".info")
-
-	for !serveCachedFile(w, r, filename, "application/json") {
-		if err := fetchAndCache(module, version); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+	switch ext {
+	case "info":
+		filename = filepath.Join(CacheDir, module, version, version+".info")
+		mimetype = "application/json"
+		log.Println("info", r.URL.Path)
+	case "mod":
+		filename = filepath.Join(CacheDir, module, version, "go.mod")
+		mimetype = "text/plain; charset=UTF-8"
+		log.Println("mod", r.URL.Path)
+	case "zip":
+		filename = filepath.Join(CacheDir, module, version, "source.zip")
+		mimetype = "application/zip"
+		log.Println("zip", r.URL.Path)
+	default:
+		http.Error(w, "Invalid request", http.StatusBadRequest)
 	}
-}
 
-func mod(w http.ResponseWriter, r *http.Request) {
-
-	// filename := "/workspaces/trusted-cloud-proxy/cache/pegasus-cloud.com/aes/toolkits/v0.4.5/go.mod"
-	log.Println("mod", r.URL.Path)
-
-	module := mux.Vars(r)["module"]
-	version := mux.Vars(r)["version"]
-
-	filename := filepath.Join(CacheDir, module, version, "go.mod")
-
-	for !serveCachedFile(w, r, filename, "text/plain; charset=UTF-8") {
-		if err := fetchAndCache(module, version); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-}
-
-func zip(w http.ResponseWriter, r *http.Request) {
-
-	// filename := "/workspaces/trusted-cloud-proxy/cache/pegasus-cloud.com/aes/toolkits/v0.4.5/source.zip"
-	log.Println("zip", r.URL.Path)
-	module := mux.Vars(r)["module"]
-	version := mux.Vars(r)["version"]
-
-	filename := filepath.Join(CacheDir, module, version, "source.zip")
-
-	for !serveCachedFile(w, r, filename, "application/zip") {
+	for !serveCachedFile(w, r, filename, mimetype) {
 		if err := fetchAndCache(module, version); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
