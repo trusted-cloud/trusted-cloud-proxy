@@ -2,7 +2,9 @@ FROM golang:1.22.4-alpine AS builder
 
 WORKDIR /app
 
-COPY . .
+COPY cmd/ cmd/
+COPY go.mod go.mod
+COPY go.sum go.sum
 
 RUN go build -ldflags="-extldflags=-static" -o tmp/goproxy cmd/goproxy.go
 
@@ -10,8 +12,7 @@ RUN go build -ldflags="-extldflags=-static" -o tmp/goproxy cmd/goproxy.go
 FROM alpine:latest
 
 WORKDIR /app
-
-COPY --from=builder /app/tmp/goproxy /app
 RUN apk add --no-cache git
+COPY --from=builder /app/tmp/goproxy /app
 
 CMD ["/app/goproxy"]
