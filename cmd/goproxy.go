@@ -239,17 +239,11 @@ func info(w http.ResponseWriter, r *http.Request) {
 
 	filename := filepath.Join(CacheDir, module, version, version+".info")
 
-	if serveCachedFile(w, r, filename, "application/json") {
-		return
-	}
-
-	if err := fetchAndCache(module, version); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if serveCachedFile(w, r, filename, "application/json") {
-		return
+	for !serveCachedFile(w, r, filename, "application/json") {
+		if err := fetchAndCache(module, version); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
@@ -263,17 +257,11 @@ func mod(w http.ResponseWriter, r *http.Request) {
 
 	filename := filepath.Join(CacheDir, module, version, "go.mod")
 
-	if serveCachedFile(w, r, filename, "text/plain; charset=UTF-8") {
-		return
-	}
-
-	if err := fetchAndCache(module, version); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if serveCachedFile(w, r, filename, "text/plain; charset=UTF-8") {
-		return
+	for !serveCachedFile(w, r, filename, "text/plain; charset=UTF-8") {
+		if err := fetchAndCache(module, version); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
@@ -286,17 +274,11 @@ func zip(w http.ResponseWriter, r *http.Request) {
 
 	filename := filepath.Join(CacheDir, module, version, "source.zip")
 
-	if serveCachedFile(w, r, filename, "application/zip") {
-		return
-	}
-
-	if err := fetchAndCache(module, version); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if serveCachedFile(w, r, filename, "application/zip") {
-		return
+	for !serveCachedFile(w, r, filename, "application/zip") {
+		if err := fetchAndCache(module, version); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
