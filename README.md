@@ -10,10 +10,12 @@ echo "127.0.0.1     proxy.pegasus-cloud.com" >> /etc/hosts
 
 
 ## Launch Proxy
-```
-cd docker-compose
-./launch.sh <GIHUB_PAT>
+```shell
+# build image
+make release-image
 
+# run proxy with valid PAT
+make REPO_TOKEN=<YOUR-GITHUB-PAT>  run-proxy
 ```
 
 
