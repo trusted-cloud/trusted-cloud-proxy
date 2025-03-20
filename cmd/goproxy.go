@@ -244,11 +244,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	case "mod":
 		filename = filepath.Join(CacheDir, module, version, "go.mod")
 		mimetype = "text/plain; charset=UTF-8"
-		log.Println("mod", r.URL.Path)
+		log.Println("mod ", r.URL.Path)
 	case "zip":
 		filename = filepath.Join(CacheDir, module, version, "source.zip")
 		mimetype = "application/zip"
-		log.Println("zip", r.URL.Path)
+		log.Println("zip ", r.URL.Path)
 	default:
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 	}
@@ -275,11 +275,13 @@ func serveCachedFile(w http.ResponseWriter, r *http.Request, cachePath string, m
 
 func fetchAndCache(name, version string) error {
 
-	segment := strings.Split(name, "/")
-	pkg := segment[len(segment)-1]
+	escapedPrefix := regexp.QuoteMeta(SrcRepo)
+	re := regexp.MustCompile("^" + escapedPrefix)
+	segment := strings.Split(re.ReplaceAllString(name, ""), "/")
+	pkg := segment[1]
 
 	repoURL := filepath.Join(DestRepo, pkg)
-	log.Println("git", repoURL)
+	log.Println("git ", repoURL)
 
 	// Create a temporary directory for the git clone
 	cloneTempDir, err := os.MkdirTemp("", "git-clone-temp")
@@ -300,7 +302,8 @@ func fetchAndCache(name, version string) error {
 	cmd := exec.Command("git", "clone", "-b", version, cloneURL, cloneTempDir)
 
 	// 6. Execute the git clone command
-	if _, err := cmd.CombinedOutput(); err != nil {
+	if output, err := cmd.CombinedOutput(); err != nil {
+		log.Println(string(output))
 		return err
 	}
 
@@ -315,6 +318,7 @@ func fetchAndCache(name, version string) error {
 
 	logOutput, err := logCmd.CombinedOutput()
 	if err != nil {
+		log.Println(string(logOutput))
 		return err
 	}
 
@@ -362,7 +366,8 @@ func fetchAndCache(name, version string) error {
 
 	zipCmd.Dir = cloneTempDir // Execute the command within the cloned repo
 
-	if _, err := zipCmd.CombinedOutput(); err != nil {
+	if output, err := zipCmd.CombinedOutput(); err != nil {
+		log.Println(string(output))
 		return err
 	}
 
