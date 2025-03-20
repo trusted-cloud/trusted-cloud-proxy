@@ -1,6 +1,7 @@
 OWNER ?= ogre0403
 IMAGE_NAME ?= goproxy
 REPO_TOKEN ?= replace-your-token-from-repo
+DEST_REPO  ?= github.com/trusted-cloud
 
 .PHONY: go-build
 go-build:
@@ -21,7 +22,7 @@ run-proxy:
 	@docker run -ti --rm \
 	-e REPO_TOKEN=$(REPO_TOKEN) \
 	-e SRC_REPO=pegasus-cloud.com/aes \
-	-e DEST_REPO=github.com/trusted-cloud \
+	-e DEST_REPO=$(DEST_REPO) \
 	-p 8078:8078 \
 	$(OWNER)/$(IMAGE_NAME)
 
