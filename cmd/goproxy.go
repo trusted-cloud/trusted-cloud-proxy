@@ -176,12 +176,8 @@ func listVersionsGit(name string) ([]string, error) {
 
 	result := []string{}
 
-	segment := strings.Split(name, "/")
-	pkg := segment[len(segment)-1]
-
-	// Construct the git command
-	repoURL := fmt.Sprintf("%s/%s", DestRepo, pkg)
-	log.Println("git", repoURL)
+	repoURL := buildGitRepoURL(name)
+	log.Println("git ", repoURL)
 
 	gitURL := fmt.Sprintf("https://%s:%s@%s", user, DestRepoToken, repoURL)
 	cmd := exec.Command("git", "ls-remote", "--tags", gitURL)
@@ -275,12 +271,7 @@ func serveCachedFile(w http.ResponseWriter, r *http.Request, cachePath string, m
 
 func fetchAndCache(name, version string) error {
 
-	escapedPrefix := regexp.QuoteMeta(SrcRepo)
-	re := regexp.MustCompile("^" + escapedPrefix)
-	segment := strings.Split(re.ReplaceAllString(name, ""), "/")
-	pkg := segment[1]
-
-	repoURL := filepath.Join(DestRepo, pkg)
+	repoURL := buildGitRepoURL(name)
 	log.Println("git ", repoURL)
 
 	// Create a temporary directory for the git clone
@@ -380,6 +371,15 @@ func fetchAndCache(name, version string) error {
 	}
 
 	return nil
+}
+
+func buildGitRepoURL(name string) string {
+	escapedPrefix := regexp.QuoteMeta(SrcRepo)
+	re := regexp.MustCompile("^" + escapedPrefix)
+	segment := strings.Split(re.ReplaceAllString(name, ""), "/")
+	pkg := segment[1]
+
+	return filepath.Join(DestRepo, pkg)
 }
 
 // copyFile copies a file from source to destination
