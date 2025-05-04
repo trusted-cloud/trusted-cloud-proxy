@@ -1,9 +1,5 @@
 OWNER        ?= ogre0403
 IMAGE_NAME   ?= goproxy
-REPO_TOKEN   ?= replace-your-token-from-repo
-SRC_REPO     ?= pegasus-cloud.com/aes
-DEST_REPO    ?= github.com/trusted-cloud
-NETWORK_NAME ?= proxy-network
 
 .PHONY: go-build
 go-build:
@@ -18,23 +14,14 @@ run:
 release-image:
 	@docker build -t $(OWNER)/$(IMAGE_NAME) .
 
-.PHONY: create-network
-create-network:
-	@docker network create $(NETWORK_NAME) || true
+
+.PHONY: proxy-up
+proxy-up: 
+	@docker-compose -f ./docker-compose/docker-compose.yaml up -d 
 
 
-.PHONY: run-proxy
-run-proxy: create-network
-	@docker run -ti --rm \
-	--name goproxy \
-	-e REPO_TOKEN=$(REPO_TOKEN) \
-	-e SRC_REPO=$(SRC_REPO) \
-	-e DEST_REPO=$(DEST_REPO) \
-	-p 8078:8078 \
-	--network=$(NETWORK_NAME) \
-	$(OWNER)/$(IMAGE_NAME)
+.PHONY: proxy-down
+proxy-down:
+	@docker-compose -f ./docker-compose/docker-compose.yaml down
 
-.PHONY: clean
-clean:
-	@docker network rm $(NETWORK_NAME)
 

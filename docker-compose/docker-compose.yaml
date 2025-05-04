@@ -1,0 +1,21 @@
+services:
+  trust-cloud-proxy:
+    container_name: goproxy
+    image: ogre0403/goproxy:latest
+    environment:
+      - REPO_TOKEN=${REPO_TOKEN}
+      - SRC_REPO=${SRC_REPO}
+      - DEST_REPO=${DEST_REPO}
+    networks:
+      proxy-network:
+      #pegasus-cloud-network:
+    ports:
+      - "8078:8078"
+
+networks:
+  proxy-network:
+    name: proxy-network
+    driver: bridge
+  pegasus-cloud-network:
+    external: true
+    name: pegasus-cloud-network
