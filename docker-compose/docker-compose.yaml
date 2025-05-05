@@ -7,8 +7,7 @@ services:
       - SRC_REPO=${SRC_REPO}
       - DEST_REPO=${DEST_REPO}
     networks:
-      proxy-network:
-      #pegasus-cloud-network:
+      proxy-network: {}
     ports:
       - "8078:8078"
 

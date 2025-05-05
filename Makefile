@@ -16,9 +16,15 @@ release-image:
 
 
 .PHONY: proxy-up
-proxy-up: 
-	@docker-compose -f ./docker-compose/docker-compose.yaml up -d 
+proxy-up:
+	cd docker-compose; \
+	cat docker-compose.yaml  | docker-compose -f - up -d
 
+
+.PHONY: proxy-up-pegasus-network
+proxy-up-pegasus-network:
+	cd docker-compose; \
+	cat docker-compose.yaml | yq e '.services.trust-cloud-proxy.networks += {"pegasus-cloud-network": {}}' | docker-compose -f - up -d
 
 .PHONY: proxy-down
 proxy-down:
