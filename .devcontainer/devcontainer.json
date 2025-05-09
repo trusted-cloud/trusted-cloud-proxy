@@ -19,21 +19,22 @@
 				"golang.Go",
 				"GitHub.copilot",
 				"isudox.vscode-jetbrains-keybindings",
-			]
+			],
+			"settings": {
+				"terminal.integrated.defaultProfile.linux": "zsh",
+				"terminal.integrated.profiles.linux": {
+					"zsh": {
+						"path": "/bin/zsh"
+					}
+				}
+			}
+		},
+		"containerEnv": {
+			"GOPROXY": "https://proxy.golang.org,http://localhost:8078",
+			"GOSUMDB": "off",
+			"SRC_REPO": "pegasus-cloud.com/aes",
+			"DEST_REPO": "github.com/trusted-cloud",
+			"REPO_TOKEN": ""
 		}
-	},
-	"containerEnv": {
-		"GOPROXY": "https://proxy.golang.org,http://goproxy-devcontainer:8080",
-		"GOSUMDB": "off",
-		"SRC_REPO": "pegasus-cloud.com/aes",
-		"DEST_REPO": "github.com/trusted-cloud",
-		"REPO_TOKEN": "",
-	},
-
-
-	// docker args to run the container, connect to KinD network
-	"runArgs": [
-		"--network=kind",
-		"--name=goproxy-devcontainer"
-	]
+	}
 }

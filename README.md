@@ -1,6 +1,6 @@
 # Trusted Cloud Proxy
 
-透過 Go module proxy 與 Vanity URL 下載 Host在Github 上的 可信賴雲 dependency package。
+透過 Go module proxy 下載 Host在Github 與 GitLab上的 可信賴雲 dependency package。
 
 ## Prepare the environment
 
@@ -15,11 +15,17 @@ echo "127.0.0.1     proxy.pegasus-cloud.com" >> /etc/hosts
 make release-image
 
 # run proxy with valid PAT
-make REPO_TOKEN=<YOUR-GITHUB-PAT>  run-proxy
+make proxy-up 
+make REPO_TOKEN=$PAT_ENV_VAR  proxy-up
+
+# or 
+# make REPO_TOKEN=$PAT_ENV_VAR proxy-up-pegasus-network
 ```
 
 
 ## Equivalent GIT CLI for Go module proxy
+
+This porxy uses `git` command to manupulate the repoisitory and generats response for proxy entrypoint. 
 
 ### list
 
