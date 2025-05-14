@@ -10,6 +10,7 @@ services:
       proxy-network: {}
     ports:
       - "8078:8078"
+    restart: on-failure
 
 networks:
   proxy-network:
